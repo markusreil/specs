@@ -77,6 +77,7 @@ README.md              project overview, architecture, quickstart, operational n
     - homepage.group=Download
     - homepage.name=The Website
     - homepage.href=https://nginx.proxy.url
+12. `restart` should be `unless-stopped` by default.
 
 ## Creating a new project
 
