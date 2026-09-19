@@ -12,6 +12,8 @@ docker-compose.yml     single compose file (services, hosts, networks, volumes)
 .env                   all configuration (secrets) — tracked in git (source of truth)
 README.md              project overview, architecture, quickstart, operational notes
 <service>/             one directory per service: Dockerfile, entrypoint.sh, README
+<service>/Dockerfile   build instructions for the service if needed
+<service>/docker       build context for the service if needed
 <service>/README.md    build details, env vars, reasoning behind security choices
 ```
 
