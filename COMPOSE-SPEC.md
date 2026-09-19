@@ -1,6 +1,6 @@
 # COMPOSE.md
 
-Guidance for creating a new Docker Compose project from scratch. 
+Guidance for creating a new Docker Compose project from scratch.
 
 Follow this document when scaffolding a new compose project so the result is
 consistent, predictable, and easy for other agents to work on.
@@ -26,6 +26,14 @@ README.md              project overview, architecture, quickstart, operational n
 
 1. **All configuration lives in `.env`.** Secrets, versions, domain, network
    names — everything that varies between deployments goes there.
+
+   Some common variable names used in many different clusters are:
+    * **BASE_DOMAIN**: Domain name used for the cluster's vhost names. Use the
+        docker hostname to get vhost names like `service1.host.domain` or use an
+        additional subdomain `cluster.host.domain` to group services, e.g. 
+        `serviceX.cluster.host.domain`).
+    * **NGINX_PROXY_NETWORK**: docker network in which nginx talks to downstream services.
+
 2. **Variable interpolation is the validation mechanism.** Every required var
    is referenced with `${VAR:?...}` so `docker compose config` fails fast on
    missing or empty values. Never substitute silent defaults for required
@@ -40,8 +48,8 @@ README.md              project overview, architecture, quickstart, operational n
    `VIRTUAL_HOST` / `VIRTUAL_PORT` / `LETSENCRYPT_HOST` / `LETSENCRYPT_EMAIL`
    env vars. No `ports:` mappings; the proxy owns all public endpoints.
 5. **Hostnames anchored once.** Define `x-hosts` anchors at the top of the
-   compose file, then reference them everywhere the hostname is needed
-   (`VIRTUAL_HOST`, `LETSENCRYPT_HOST`, app-level hostname settings). Changing
+   compose file, then reference them everywhere the hostname is needed (`VIRTUAL_HOST`, `LETSENCRYPT_HOST`, app-level
+   hostname settings). Changing
    one variable in `.env` moves the whole stack.
 6. **`base image alpine`.** Build images from source in the repo; avoid
    third-party/LinuxServer-style images unless there is a real reason not to.
@@ -62,6 +70,11 @@ README.md              project overview, architecture, quickstart, operational n
    running user).
 10. **`.env` is tracked in git.** Do not gitignore it and do not scatter
     secrets into other files.
+11. Set sensible defaults to integrate with [Homepage](https://gethomepage.dev/).
+    Set labels like:
+    - homepage.group=Download
+    - homepage.name=The Website
+    - homepage.href=https://nginx.proxy.url
 
 ## Creating a new project
 
