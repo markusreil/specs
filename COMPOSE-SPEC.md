@@ -13,13 +13,16 @@ docker-compose.yml     single compose file (services, hosts, networks, volumes)
 .env                   local configuration (secrets) — never tracked in git, copied from .env.example
 .gitignore             must ignore `.env`
 README.md              project overview, architecture, quickstart, operational notes
-<service>/             one directory per service: Dockerfile, entrypoint.sh, README
-<service>/Dockerfile   build instructions for the service if needed
-<service>/docker       build context for the service if needed
+<service>/             one directory per service needing a build: Dockerfile, docker/, README
+<service>/Dockerfile   build instructions for the service
+<service>/docker/      all context files copied into the image (entrypoint.sh, scripts, templates, etc.)
 <service>/README.md    build details, env vars, reasoning behind security choices
 ```
 
 * One compose file for the whole project; no per-service compose fragments.
+* The tracked example may be named `.env.example` (preferred) or `env.example`;
+  both are accepted. This spec uses `.env.example` throughout — read it as
+  `env.example` where the project uses that name (e.g. `cp env.example .env`).
 * One directory per service holding everything needed to build its image and
   the README explaining it.
 * Each service README documents build steps, environment variables, and the
@@ -37,6 +40,18 @@ README.md              project overview, architecture, quickstart, operational n
         additional subdomain `cluster.host.domain` to group services, e.g. 
         `serviceX.cluster.host.domain`).
     * **NGINX_PROXY_NETWORK**: docker network in which nginx talks to downstream services.
+    * **BASE_IMAGE**: Base image recorded in the built image as a hardcoded
+        `ENV` (e.g. `ENV BASE_IMAGE=alpine:3.20`). No `ARG`, no compose
+        wiring — it documents what the image was built `FROM`. Build-time
+        only: never put it in `.env` / `.env.example`.
+    * **BUILD_DATE**: Build timestamp (UTC ISO-8601) recorded in the built
+        image. Dockerfile pattern is `ARG BUILD_DATE=unknown` +
+        `ENV BUILD_DATE=${BUILD_DATE}`; compose passes it via
+        `build.args` as `${BUILD_DATE:-unknown}` (optional, fails open to
+        `unknown`). Stamp it at build time with
+        `BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) docker compose build`.
+        Build-time only: never put it in `.env` / `.env.example` — it is a
+        shell env var at build time, not deployment configuration.
 
 2. **Variable interpolation is the validation mechanism.** Every required var
    is referenced with `${VAR:?...}` so `docker compose config` fails fast on
@@ -55,14 +70,17 @@ README.md              project overview, architecture, quickstart, operational n
    compose file, then reference them everywhere the hostname is needed (`VIRTUAL_HOST`, `LETSENCRYPT_HOST`, app-level
    hostname settings). Changing
    one variable in `.env` moves the whole stack.
-6. **`base image alpine`.** Build images from source in the repo; avoid
-   third-party/LinuxServer-style images unless there is a real reason not to.
-   Extra build steps per service are fine.
-7. **Standard named volumes, no bind mounts.** Use standard named docker
+6. **`base image alpine` preferred.** Build images from source in the repo where
+   it makes sense; upstream images are acceptable on a case-by-case basis
+   (e.g. when the upstream image *is* the service, like nginx-proxy or
+   acme-companion). Extra build steps per service are fine. Document the
+   reasoning when using upstream images.
+7. **Standard named volumes preferred, no data bind mounts.** Use standard named docker
    volumes for every stateful path so configuration survives restarts and
-   rebuilds. Never use host bind mounts (e.g. `./data:/data`); data and
-   configuration must live in named volumes, never on the host filesystem
-   directly, to ensure portability and isolation.
+   rebuilds. Never use host bind mounts for stateful data (e.g. `./data:/data`);
+   bind mounts are acceptable on a case-by-case basis for config overlays
+   (e.g. `./vhost.d`, `./conf.d`) and special cases (docker socket, devices).
+   Document the reasoning when a bind mount is used.
 8. **Entrypoints are write-once config seeders.** Each `entrypoint.sh` seeds a
    minimal config on FIRST start only (`if [ ! -f ... ]`), then never
    overwrites. Config changes do not apply to existing volumes; document the
@@ -131,8 +149,9 @@ Before finishing a project or change:
 6. No host `ports:` mappings — everything goes through the proxy network.
 7. Hostnames come from the anchors, not copy-pasted literals.
 8. No hardcoded `container_name:` in services — rely on default container naming.
-9. No host bind mounts in volumes (exceptions: docker socket, special devices, etc.)
-   — use standard named docker volumes only.
+9. No host bind mounts for stateful data (exceptions: config overlays like
+   `vhost.d`/`conf.d` on a case-by-case basis, docker socket, special devices,
+   etc.) — use standard named docker volumes for data.
 
 ## Common pitfalls
 
