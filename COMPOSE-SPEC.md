@@ -53,6 +53,11 @@ README.md              project overview, architecture, quickstart, operational n
         Build-time only: never put it in `.env` / `env.example` — it is a
         shell env var at build time, not deployment configuration.
 
+    Group `.env` / `env.example` with global vars at the top, then one
+    `# --- <service> ---` section per service (matching compose service
+    names). Keep both files in the same order and shape; every variable
+    keeps its own comment.
+
 2. **Variable interpolation is the validation mechanism.** Every required var
    is referenced with `${VAR:?...}` so `docker compose config` fails fast on
    missing or empty values. Never substitute silent defaults for required
@@ -126,7 +131,8 @@ README.md              project overview, architecture, quickstart, operational n
    explicitly and are documented as optional.
 5. **Write each custom entrypoint (where required by rules 8-9) as a first-run seeder + privilege drop.** Skip for 3rd-party upstream images with no seeding needs; document why in the service README.
 6. **Fill in `env.example`** with every variable, a sensible example, and a
-   comment for each. Keep it in sync with the compose file and READMEs.
+   comment for each. Group global vars at the top, then one `# --- <service> ---`
+   section per service. Keep it in sync with the compose file and READMEs.
    Ensure `.env` is gitignored.
 7. **Verify** (see below).
 
