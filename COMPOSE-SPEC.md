@@ -9,20 +9,20 @@ consistent, predictable, and easy for other agents to work on.
 
 ```
 docker-compose.yml     single compose file (services, hosts, networks, volumes)
-.env.example           tracked example configuration (source of truth for shape)
-.env                   local configuration (secrets) — never tracked in git, copied from .env.example
+env.example            tracked example configuration, not hidden (source of truth for shape)
+.env                   local configuration (secrets) — hidden, never tracked in git, copied from env.example
 .gitignore             must ignore `.env`
 README.md              project overview, architecture, quickstart, operational notes
 <service>/             one directory per service needing a build: Dockerfile, docker/, README
 <service>/Dockerfile   build instructions for the service
-<service>/docker/      all context files copied into the image (entrypoint.sh, scripts, templates, etc.)
+<service>/docker/      all context files copied into the image (scripts, templates, etc.; entrypoint.sh only where rules 8-9 apply)
 <service>/README.md    build details, env vars, reasoning behind security choices
 ```
 
 * One compose file for the whole project; no per-service compose fragments.
-* The tracked example may be named `.env.example` (preferred) or `env.example`;
-  both are accepted. This spec uses `.env.example` throughout — read it as
-  `env.example` where the project uses that name (e.g. `cp env.example .env`).
+* The tracked example is `env.example` (not hidden, tracked by git); do not
+  use a dot-prefixed variant. Copy it to `.env` (hidden, never tracked)
+  for local use (e.g. `cp env.example .env`).
 * One directory per service holding everything needed to build its image and
   the README explaining it.
 * Each service README documents build steps, environment variables, and the
@@ -31,7 +31,7 @@ README.md              project overview, architecture, quickstart, operational n
 
 ## Non-negotiable rules
 
-1. **All configuration lives in `.env`.** Secrets, versions, domain, network
+1. **All configuration lives in `.env` (hidden, never tracked).** Secrets, versions, domain, network
    names — everything that varies between deployments goes there.
 
    Some common variable names used in many different clusters are:
@@ -43,14 +43,14 @@ README.md              project overview, architecture, quickstart, operational n
     * **BASE_IMAGE**: Base image recorded in the built image as a hardcoded
         `ENV` (e.g. `ENV BASE_IMAGE=alpine:3.20`). No `ARG`, no compose
         wiring — it documents what the image was built `FROM`. Build-time
-        only: never put it in `.env` / `.env.example`.
+        only: never put it in `.env` / `env.example`.
     * **BUILD_DATE**: Build timestamp (UTC ISO-8601) recorded in the built
         image. Dockerfile pattern is `ARG BUILD_DATE=unknown` +
         `ENV BUILD_DATE=${BUILD_DATE}`; compose passes it via
         `build.args` as `${BUILD_DATE:-unknown}` (optional, fails open to
         `unknown`). Stamp it at build time with
         `BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) docker compose build`.
-        Build-time only: never put it in `.env` / `.env.example` — it is a
+        Build-time only: never put it in `.env` / `env.example` — it is a
         shell env var at build time, not deployment configuration.
 
 2. **Variable interpolation is the validation mechanism.** Every required var
@@ -64,8 +64,11 @@ README.md              project overview, architecture, quickstart, operational n
    default container naming so containers scale cleanly and avoid name collisions.
 4. **Reverse-proxy integration, not host port publishing.** Services attach to
    the shared external proxy network and advertise HTTP via `expose` plus
-   `VIRTUAL_HOST` / `VIRTUAL_PORT` / `LETSENCRYPT_HOST` / `LETSENCRYPT_EMAIL`
-   env vars. No `ports:` mappings; the proxy owns all public endpoints.
+   `VIRTUAL_HOST` / `VIRTUAL_PORT` / `LETSENCRYPT_HOST` (`ACME_HOST`) env vars.
+   No `ports:` mappings; the proxy owns all public endpoints. Do not set
+   `LETSENCRYPT_EMAIL` / `ACME_EMAIL` per service — the proxy supplies
+   `DEFAULT_EMAIL` (from its `LE_EMAIL`) as the default contact; set a
+   per-service email only for an explicit override.
 5. **Hostnames anchored once.** Define `x-hosts` anchors at the top of the
    compose file, then reference them everywhere the hostname is needed (`VIRTUAL_HOST`, `LETSENCRYPT_HOST`, app-level
    hostname settings). Changing
@@ -81,19 +84,24 @@ README.md              project overview, architecture, quickstart, operational n
    bind mounts are acceptable on a case-by-case basis for config overlays
    (e.g. `./vhost.d`, `./conf.d`) and special cases (docker socket, devices).
    Document the reasoning when a bind mount is used.
-8. **Entrypoints are write-once config seeders.** Each `entrypoint.sh` seeds a
+8. **Entrypoints are write-once config seeders (custom-built images only).** When
+   a service needs first-run seeding, each `entrypoint.sh` seeds a
    minimal config on FIRST start only (`if [ ! -f ... ]`), then never
    overwrites. Config changes do not apply to existing volumes; document the
-   reseed procedure (remove service + volume, then `up -d`).
-9. **`PUID`/`PGID` privilege drop.** Entrypoints run as root, create
+   reseed procedure (remove service + volume, then `up -d`). Not required for
+   3rd-party upstream images where the upstream image *is* the service (see
+   rule 6) and no seeding is needed (e.g. config baked at build time);
+   document in the service README why no entrypoint exists.
+9. **`PUID`/`PGID` privilege drop (where a custom entrypoint exists).** Entrypoints run as root, create
    user/group with the requested IDs, `chown` correctly, then `su-exec` to the
    unprivileged user. Chown config dirs recursively (small); chown data dirs
    only at the root (potentially huge — new files inherit ownership from the
-   running user).
-10. **`.env` is never tracked in git.** Track `.env.example` instead and
+   running user). Not required when there is no custom entrypoint;
+   upstream images manage their own user. Document the choice in the service README.
+10. **`.env` (hidden) is never tracked in git.** Track `env.example` instead and
     gitignore `.env`; do not scatter secrets into other files. Standard
     process for the user is to copy the example file and edit it
-    accordingly before starting the cluster (`cp .env.example .env`).
+    accordingly before starting the cluster (`cp env.example .env`).
 11. Set sensible defaults to integrate with [Homepage](https://gethomepage.dev/).
     Set labels like:
     - homepage.group=Download
@@ -106,17 +114,18 @@ README.md              project overview, architecture, quickstart, operational n
 1. **Nail down the requirements first** — services, public hostnames, which
    configuration must be per-deployment, and the security posture (LAN-only vs
    exposed). Write the spec down before scaffolding.
-2. **Scaffold the layout**: compose file, `.env.example` (+ gitignored
+2. **Scaffold the layout**: compose file, `env.example` (+ gitignored
    `.env`), `.gitignore`, README.md, one service dir per
-   service with Dockerfile + entrypoint.sh + README.
+   service with Dockerfile + docker/ + README (+ entrypoint.sh only where
+   rules 8-9 apply; omit for 3rd-party upstream images with no seeding needs).
 3. **Write the compose file bottom-up**:
    `name:` → `x-hosts` anchors → services (each with build context, image tag
    from the version var, env, volumes, expose, proxy network) → external
    `networks:` → `volumes:`.
 4. **Every env var gets a `:?...` guard**; optional vars use `${VAR:-default}`
    explicitly and are documented as optional.
-5. **Write each entrypoint as a first-run seeder + privilege drop.**
-6. **Fill in `.env.example`** with every variable, a sensible example, and a
+5. **Write each custom entrypoint (where required by rules 8-9) as a first-run seeder + privilege drop.** Skip for 3rd-party upstream images with no seeding needs; document why in the service README.
+6. **Fill in `env.example`** with every variable, a sensible example, and a
    comment for each. Keep it in sync with the compose file and READMEs.
    Ensure `.env` is gitignored.
 7. **Verify** (see below).
@@ -125,7 +134,7 @@ README.md              project overview, architecture, quickstart, operational n
 
 ```sh
 # standard start: copy the tracked example and edit it accordingly (.env is never committed)
-cp .env.example .env
+cp env.example .env
 # edit .env accordingly before starting the cluster
 docker compose config  # sanity check; fails fast on missing vars
 docker compose build
@@ -141,11 +150,11 @@ serve their UIs is the verification baseline.
 
 Before finishing a project or change:
 
-1. `docker compose config` passes with `.env` (copied from `.env.example`).
+1. `docker compose config` passes with `.env` (copied from `env.example`).
 2. Required vars still fail fast — no silent defaults introduced.
-3. Env vars are documented in `.env.example` and the service READMEs; `.env` is gitignored.
-4. Seeding logic only runs on first start; existing configs are untouched.
-5. `PUID`/`PGID` chown behavior preserved (no recursive chown on data dirs).
+3. Env vars are documented in `env.example` and the service READMEs; `.env` is gitignored.
+4. Where a custom entrypoint exists: seeding logic only runs on first start; existing configs are untouched. Skip for 3rd-party images with no entrypoint (reason documented in service README).
+5. Where a custom entrypoint exists: `PUID`/`PGID` chown behavior preserved (no recursive chown on data dirs). Skip when there is no custom entrypoint.
 6. No host `ports:` mappings — everything goes through the proxy network.
 7. Hostnames come from the anchors, not copy-pasted literals.
 8. No hardcoded `container_name:` in services — rely on default container naming.
