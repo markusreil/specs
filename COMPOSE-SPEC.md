@@ -9,7 +9,9 @@ consistent, predictable, and easy for other agents to work on.
 
 ```
 docker-compose.yml     single compose file (services, hosts, networks, volumes)
-.env                   all configuration (secrets) — tracked in git (source of truth)
+.env.example           tracked example configuration (source of truth for shape)
+.env                   local configuration (secrets) — never tracked in git, copied from .env.example
+.gitignore             must ignore `.env`
 README.md              project overview, architecture, quickstart, operational notes
 <service>/             one directory per service: Dockerfile, entrypoint.sh, README
 <service>/Dockerfile   build instructions for the service if needed
@@ -70,8 +72,10 @@ README.md              project overview, architecture, quickstart, operational n
    unprivileged user. Chown config dirs recursively (small); chown data dirs
    only at the root (potentially huge — new files inherit ownership from the
    running user).
-10. **`.env` is tracked in git.** Do not gitignore it and do not scatter
-    secrets into other files.
+10. **`.env` is never tracked in git.** Track `.env.example` instead and
+    gitignore `.env`; do not scatter secrets into other files. Standard
+    process for the user is to copy the example file and edit it
+    accordingly before starting the cluster (`cp .env.example .env`).
 11. Set sensible defaults to integrate with [Homepage](https://gethomepage.dev/).
     Set labels like:
     - homepage.group=Download
@@ -84,7 +88,8 @@ README.md              project overview, architecture, quickstart, operational n
 1. **Nail down the requirements first** — services, public hostnames, which
    configuration must be per-deployment, and the security posture (LAN-only vs
    exposed). Write the spec down before scaffolding.
-2. **Scaffold the layout**: compose file, `.env`, README.md, one service dir per
+2. **Scaffold the layout**: compose file, `.env.example` (+ gitignored
+   `.env`), `.gitignore`, README.md, one service dir per
    service with Dockerfile + entrypoint.sh + README.
 3. **Write the compose file bottom-up**:
    `name:` → `x-hosts` anchors → services (each with build context, image tag
@@ -93,14 +98,17 @@ README.md              project overview, architecture, quickstart, operational n
 4. **Every env var gets a `:?...` guard**; optional vars use `${VAR:-default}`
    explicitly and are documented as optional.
 5. **Write each entrypoint as a first-run seeder + privilege drop.**
-6. **Fill in `.env`** with every variable, a sensible example, and a
+6. **Fill in `.env.example`** with every variable, a sensible example, and a
    comment for each. Keep it in sync with the compose file and READMEs.
+   Ensure `.env` is gitignored.
 7. **Verify** (see below).
 
 ## Build / run / verify
 
 ```sh
-# edit .env directly (tracked in git as source of truth)
+# standard start: copy the tracked example and edit it accordingly (.env is never committed)
+cp .env.example .env
+# edit .env accordingly before starting the cluster
 docker compose config  # sanity check; fails fast on missing vars
 docker compose build
 docker compose up -d
@@ -115,9 +123,9 @@ serve their UIs is the verification baseline.
 
 Before finishing a project or change:
 
-1. `docker compose config` passes with `.env`.
+1. `docker compose config` passes with `.env` (copied from `.env.example`).
 2. Required vars still fail fast — no silent defaults introduced.
-3. Env vars are documented in `.env` and the service READMEs.
+3. Env vars are documented in `.env.example` and the service READMEs; `.env` is gitignored.
 4. Seeding logic only runs on first start; existing configs are untouched.
 5. `PUID`/`PGID` chown behavior preserved (no recursive chown on data dirs).
 6. No host `ports:` mappings — everything goes through the proxy network.
