@@ -13,6 +13,8 @@ env.example            tracked example configuration, not hidden (source of trut
 .env                   local configuration (secrets) — hidden, never tracked in git, copied from env.example
 .gitignore             must ignore `.env`
 README.md              project overview, architecture, quickstart, operational notes
+CHANGELOG.md           notable changes, kept in sync with development (see below)
+AGENTS.md              short, ongoing project rules for agents working in the repo (see below)
 <service>/             one directory per service needing a build: Dockerfile, docker/, README
 <service>/Dockerfile   build instructions for the service
 <service>/docker/      all context files copied into the image (scripts, templates, etc.; entrypoint.sh only where rules 8-9 apply)
@@ -28,6 +30,65 @@ README.md              project overview, architecture, quickstart, operational n
 * Each service README documents build steps, environment variables, and the
   reasoning behind non-obvious choices (especially security). Keep READMEs in
   sync when behavior changes.
+
+## Changelog
+
+Create a `CHANGELOG.md` at the project root and follow the
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) spec.
+
+* Keep an `## [Unreleased]` section at the top and fill it in **as changes are
+  made** — do not batch entries up for a later release.
+* The `Unreleased` template carries the standard subsections: `Added`,
+  `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`. Add each entry under
+  the matching one and leave the unused ones empty.
+* Newest entries first within a section; dates are ISO-8601 (`YYYY-MM-DD`).
+* **Do not create a release section on your own.** When the user asks for a
+  release, move the accumulated `Unreleased` entries into a new
+  `## [<version>] - <date>` section (semantic version), leave a fresh empty
+  `## [Unreleased]` above it, and keep the sections newest-first.
+
+The header should look like:
+
+```md
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+```
+
+## AGENTS.md
+
+Create an `AGENTS.md` at the project root: a short summary of this spec, scoped
+to the rules that stay relevant **while working in the project**.
+
+* Include the ongoing rules an agent must respect on every change: `.env` /
+  `env.example` handling, fail-fast `${VAR:?...}` interpolation, reverse-proxy
+  integration (no `ports:`), hostname anchors, named volumes over bind mounts,
+  entrypoint seeding + `PUID`/`PGID`, changelog discipline, `restart` policy,
+  Homepage labels, and the verification commands.
+* Keep it short — a summary, not a copy. Link back to `README.md` and the
+  service READMEs for detail instead of duplicating them.
+* **Exclude anything that only matters during initial project creation**: the
+  deliverable layout, the "Creating a new project" steps, and other one-time
+  scaffolding guidance stay in this spec only. If it is not needed to work on
+  the finished project, it does not belong in `AGENTS.md`.
+* Keep `AGENTS.md` in sync when the project's rules change.
 
 ## Non-negotiable rules
 
@@ -120,8 +181,8 @@ README.md              project overview, architecture, quickstart, operational n
    configuration must be per-deployment, and the security posture (LAN-only vs
    exposed). Write the spec down before scaffolding.
 2. **Scaffold the layout**: compose file, `env.example` (+ gitignored
-   `.env`), `.gitignore`, README.md, one service dir per
-   service with Dockerfile + docker/ + README (+ entrypoint.sh only where
+   `.env`), `.gitignore`, README.md, CHANGELOG.md, AGENTS.md, one service dir
+   per service with Dockerfile + docker/ + README (+ entrypoint.sh only where
    rules 8-9 apply; omit for 3rd-party upstream images with no seeding needs).
 3. **Write the compose file bottom-up**:
    `name:` → `x-hosts` anchors → services (each with build context, image tag
@@ -167,6 +228,10 @@ Before finishing a project or change:
 9. No host bind mounts for stateful data (exceptions: config overlays like
    `vhost.d`/`conf.d` on a case-by-case basis, docker socket, special devices,
    etc.) — use standard named docker volumes for data.
+10. `CHANGELOG.md` exists, follows Keep a Changelog, and reflects the change in
+    its `## [Unreleased]` section.
+11. `AGENTS.md` exists and summarizes the ongoing project rules only — no
+    one-time scaffolding guidance.
 
 ## Common pitfalls
 
